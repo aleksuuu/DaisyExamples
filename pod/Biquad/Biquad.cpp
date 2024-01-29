@@ -1,4 +1,3 @@
-// #include "daisy_patch.h"
 #include "daisy_pod.h"
 #include "daisysp.h"
 
@@ -10,14 +9,23 @@ using namespace daisy;
 using namespace daisysp;
 
 // constants
-const float AMP_LIMIT       = 1.f;
-const float MIN_Q           = 0.00001f;
-const float MAX_Q           = 100.f;
-const float MIN_CENTER_FREQ = 20.f;
-const float MAX_CENTER_FREQ = 20000.f;
+#define AMP_LIMIT 1.f
+#define MIN_Q 0.00001f
+#define MAX_Q 100.f
+#define MIN_CENTER_FREQ 20.f
+#define MAX_CENTER_FREQ 20000.f
+#define MIN_GAIN_DB -80.f
+#define MAX_GAIN_DB 12.f
+#define NUM_FILTERS 3
+
+enum FilterType
+{
+    LOW_PASS,
+    HIGH_PASS,
+    BAND_PASS
+};
 
 // hw related
-// DaisyPatch hw;
 DaisyPod   hw;
 Parameter  center_freq_param, q_param;
 WhiteNoise noise;
@@ -27,7 +35,9 @@ float      sample_rate;
 // user-defined params
 float center_freq = 500;
 float q           = 0.707; // 1 / sqrt(2)
-float gain_db     = 0.5;   // only for peaking and shelving
+float gain_db     = 0.;    // only for peaking and shelving
+
+FilterType filter_type = LOW_PASS;
 
 // coefficients
 float a0, a1, a2, b0, b1, b2;
@@ -44,12 +54,27 @@ void GetCoefficients()
     float alpha = sn / (2 * q);
 
     // only for peaking and shelving
-    // float gain_abs = pow(10, gain_db / 40);
-    // float beta     = sqrt(gain_abs * 2);
-
-    b0 = (1 - cs) / 2;
-    b1 = 1 - cs;
-    b2 = (1 - cs) / 2;
+    float gain_amps = pow(10, gain_db / 40);
+    float beta      = sqrt(gain_amps * 2);
+    switch(filter_type)
+    {
+        case LOW_PASS:
+            b0 = (1 - cs) * 0.5;
+            b1 = 1 - cs;
+            b2 = (1 - cs) * 0.5;
+            break;
+        case HIGH_PASS:
+            b0 = (1 + cs) * 0.5;
+            b1 = -1 - cs;
+            b2 = (1 + cs) * 0.5;
+            break;
+        case BAND_PASS:
+            b0 = alpha;
+            b1 = 0;
+            b2 = -alpha;
+            break;
+        default: break;
+    }
     a0 = 1 + alpha;
     a1 = -2 * cs;
     a2 = 1 - alpha;
@@ -81,15 +106,19 @@ float Process(float x)
     y2   = yOne;
     yOne = y;
     // I am a coward
-    if(y > AMP_LIMIT)
-    {
-        y = AMP_LIMIT;
-    }
-    else if(y < -AMP_LIMIT)
-    {
-        y = -AMP_LIMIT;
-    }
+    y = fclamp(y, -AMP_LIMIT, AMP_LIMIT);
     return y;
+}
+
+void UpdateEncoder()
+{
+    if(hw.encoder.RisingEdge())
+    {
+        int filter_index = (static_cast<int>(filter_type) + 1) % NUM_FILTERS;
+        filter_type      = static_cast<FilterType>(filter_index);
+    }
+    gain_db += hw.encoder.Increment();
+    gain_db = fclamp(gain_db, MIN_GAIN_DB, MAX_GAIN_DB);
 }
 
 void UpdateKnobs()
@@ -115,7 +144,7 @@ static void AudioCallback(AudioHandle::InputBuffer  in,
                           size_t                    size)
 {
     hw.ProcessDigitalControls();
-
+    UpdateEncoder();
     UpdateButtons();
     UpdateKnobs();
     GetCoefficients();
