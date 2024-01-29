@@ -1,18 +1,23 @@
+// #include "daisy_patch.h"
 #include "daisy_pod.h"
 #include "daisysp.h"
+
+// a SVF with a limiter because I'm a coward
+// Questions: 1. How could I do logging in VSCode?
 
 using namespace std;
 using namespace daisy;
 using namespace daisysp;
 
 // constants
-const float MAX_Q           = 1.f;
-const float MIN_Q           = 0.1f;
 const float AMP_LIMIT       = 1.f;
-const float MIN_CENTER_FREQ = 30.f;
-const float MAX_CENTER_FREQ = 18000.f;
+const float MIN_Q           = 0.00001f;
+const float MAX_Q           = 100.f;
+const float MIN_CENTER_FREQ = 20.f;
+const float MAX_CENTER_FREQ = 20000.f;
 
 // hw related
+// DaisyPatch hw;
 DaisyPod   hw;
 Parameter  center_freq_param, q_param;
 WhiteNoise noise;
@@ -25,7 +30,6 @@ float q           = 0.707; // 1 / sqrt(2)
 float gain_db     = 0.5;   // only for peaking and shelving
 
 // coefficients
-
 float a0, a1, a2, b0, b1, b2;
 float x1, x2, y, yOne, y2; // y1 is used in math.h :/
 
@@ -40,8 +44,8 @@ void GetCoefficients()
     float alpha = sn / (2 * q);
 
     // only for peaking and shelving
-    float gain_abs = pow(10, gain_db / 40);
-    float beta     = sqrt(gain_abs * 2);
+    // float gain_abs = pow(10, gain_db / 40);
+    // float beta     = sqrt(gain_abs * 2);
 
     b0 = (1 - cs) / 2;
     b1 = 1 - cs;
